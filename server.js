@@ -9,13 +9,20 @@ const PORT = process.env.PORT || 3000; // Azure sets PORT automatically
 
 // PostgreSQL Connection (Azure)
 const pool = new Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: { rejectUnauthorized: false }, // Azure PostgreSQL requires SSL
+    host: process.env.AZURE_POSTGRESQL_HOST,
+    user: process.env.AZURE_POSTGRESQL_USER,
+    password: process.env.AZURE_POSTGRESQL_PASSWORD,
+    database: process.env.AZURE_POSTGRESQL_DATABASE,
+    port: Number(process.env.AZURE_POSTGRESQL_PORT),
+    // Depending on your AZURE_POSTGRESQL_SSL value, you can conditionally set ssl options:
+    ssl: process.env.AZURE_POSTGRESQL_SSL === 'true' 
+           ? { rejectUnauthorized: false } 
+           : false,
     max: 10,
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 5000,
     keepAlive: true
-});
+  });
 
 // Handle unexpected PostgreSQL errors
 pool.on("error", (err) => {
