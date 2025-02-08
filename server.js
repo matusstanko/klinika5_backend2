@@ -63,8 +63,9 @@ app.get("/api/health", async (req, res) => {
 // CORS Config for Azure Deployment
 const cors = require("cors");
 app.use(cors({
-  origin: "https://jolly-rock-000ff9f03.4.azurestaticapps.net", 
-  methods: ["GET", "POST", "DELETE", "PUT"],
+  origin: "https://jolly-rock-000ff9f03.4.azurestaticapps.net", // Your frontend URL
+  methods: ["GET", "POST", "DELETE", "PUT", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
   credentials: true
 }));
 
