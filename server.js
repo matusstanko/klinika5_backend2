@@ -62,12 +62,34 @@ app.get("/api/health", async (req, res) => {
 
 // CORS Config for Azure Deployment
 const cors = require("cors");
+const allowedOrigins = [
+    "http://localhost:8080", // Povolenie pre lokálny frontend
+    "https://red-dune-0ace81103.4.azurestaticapps.net" // Povolenie pre Azure frontend
+  ];
+
+  app.use(cors({
+    origin: function (origin, callback) {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
+    methods: ["GET", "POST", "DELETE", "PUT", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: true
+  }));
+
+
+/*
 app.use(cors({
-  origin: "https://red-dune-0ace81103.4.azurestaticapps.net", // Your frontend URL
+  //origin: "https://red-dune-0ace81103.4.azurestaticapps.net", // Your frontend URL
+  origin: "localhost:8080",
   methods: ["GET", "POST", "DELETE", "PUT", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
   credentials: true
 }));
+*/
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public"))); // Serve static files
