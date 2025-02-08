@@ -63,7 +63,6 @@ app.get("/api/health", async (req, res) => {
 // CORS Config for Azure Deployment
 const cors = require("cors");
 const allowedOrigins = [
-    "192.168.0.105:8080",
     "https://matustest.eu",
     "http://localhost:8080", // Povolenie pre lokálny frontend
     "https://red-dune-0ace81103.4.azurestaticapps.net" // Povolenie pre Azure frontend
