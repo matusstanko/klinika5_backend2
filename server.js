@@ -81,19 +81,38 @@ const vonage = new Vonage({
 });
 
 
-const sendSMS = async (phone, text) => {
-    const from = "Vonage APIs";  // Sender name (it can be a string or a valid phone number)
+const sendConfirmationSMS = async (phone, reservationDetails) => {
+    const from = "Vonage APIs";  // Sender name (can be a string or a phone number)
     const to = phone;  // Recipient phone number
-    const messageText = text;  // Message body
+    const BASE_URL = process.env.BASE_URL || "https://red-dune-0ace81103.4.azurestaticapps.net";
+    const cancelLink = `${BASE_URL}/zrusit.html?token=${reservationDetails.cancellation_token}`;
+
+    const smsMessage = `✅ Vaša rezervácia bola úspešná.\n📅 Dátum: ${reservationDetails.date}\n⏰ Čas: ${reservationDetails.time}\n❌ Zrušenie: ${cancelLink}  `;
 
     try {
-        await vonage.sms.send({ to, from, text: messageText });
-        console.log('Message sent successfully');
+        await vonage.sms.send({ to, from, text: smsMessage });
+        console.log(`✅ Confirmation SMS sent to ${phone}`);
     } catch (err) {
-        console.log('There was an error sending the message.');
+        console.log('❌ Error sending confirmation SMS.');
         console.error(err);
     }
 };
+const sendCancelSMS = async (phone, reservationDetails) => {
+    const from = "Vonage APIs";  // Sender name (can be a string or a phone number)
+    const to = phone;  // Recipient phone number
+    const createLink = `https://red-dune-0ace81103.4.azurestaticapps.net/objednat-sa.html`;
+
+    const smsMessage = `❌ Vaša rezervácia bola zrušená.\n📅 Dátum: ${reservationDetails.date}\n⏰ Čas: ${reservationDetails.time}\n🔄 Nová rezervácia: ${createLink}  `;
+
+    try {
+        await vonage.sms.send({ to, from, text: smsMessage });
+        console.log(`✅ Cancellation SMS sent to ${phone}`);
+    } catch (err) {
+        console.log('❌ Error sending cancellation SMS.');
+        console.error(err);
+    }
+};
+
 
 
 
@@ -249,9 +268,17 @@ app.post("/api/create_reservation", async (req, res) => {
         await client.query("UPDATE time_slots SET is_taken = true WHERE id = $1", [timeslot_id]);
         await client.query("COMMIT");
 
-        // Send confirmation email and SMS
-        sendConfirmationEmail(email, phone, { date: checkResult.rows[0].date, time: checkResult.rows[0].time, cancellation_token: cancellationToken });
-        sendSMS(phone, `✅ Vaša rezervácia bola úspešná. Termín: ${checkResult.rows[0].date} o ${checkResult.rows[0].time}.`);  // Send SMS here
+        const reservationDetails = {
+            date: checkResult.rows[0].date,
+            time: checkResult.rows[0].time,
+            cancellation_token: cancellationToken
+        };
+
+        // ✅ Send confirmation email
+        sendConfirmationEmail(email, phone, reservationDetails);
+
+        // ✅ Send confirmation SMS using Vonage
+        sendConfirmationSMS(phone, reservationDetails);
 
         res.json({ message: "Rezervácia úspešná!" });
 
@@ -269,7 +296,7 @@ app.post("/api/create_reservation", async (req, res) => {
 
 
 
-// Vymazat
+// Vymazat reszervaciu
 app.post("/api/cancel_reservation", async (req, res) => {
     const { cancellation_token } = req.body;
 
@@ -325,10 +352,8 @@ app.post("/api/cancel_reservation", async (req, res) => {
         // 5️⃣ Send cancellation email
         sendCancelEmail(email, phone, { formattedDate, formattedTime });
 
-        // 6️⃣ Send cancellation SMS
-        const newBookingLink = `https://red-dune-0ace81103.4.azurestaticapps.net/objednat-sa.html`;
-        const cancellationMessage = `❌ Vasa rezervacia bola zrusená.\n📅 Datum: ${formattedDate}\n⏰ cas: ${formattedTime}\n🔄 Nova rezervacia: ${newBookingLink}`;
-        sendSMS(phone, cancellationMessage);
+        // 6️⃣ Send cancellation SMS using Vonage
+        sendCancelSMS(phone, { date: formattedDate, time: formattedTime });
 
         res.json({ message: "Rezervácia bola úspešne zrušená a termín je opäť dostupný." });
 
@@ -340,6 +365,8 @@ app.post("/api/cancel_reservation", async (req, res) => {
         client.release();
     }
 });
+
+
 
 // Start server
 app.listen(PORT, () => console.log(`🟢 Server beží na port ${PORT}`));
