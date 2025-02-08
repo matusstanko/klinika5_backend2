@@ -82,12 +82,12 @@ const vonage = new Vonage({
 
 
 const sendConfirmationSMS = async (phone, reservationDetails) => {
-    const from = "Vonage APIs";  // Sender name (can be a string or a phone number)
+    const from = "Dentalna Klinika Humenne";  // Sender name (can be a string or a phone number)
     const to = phone;  // Recipient phone number
     const BASE_URL = process.env.BASE_URL || "https://red-dune-0ace81103.4.azurestaticapps.net";
     const cancelLink = `${BASE_URL}/zrusit.html?token=${reservationDetails.cancellation_token}`;
 
-    const smsMessage = `✅ Vaša rezervácia bola úspešná.\n📅 Dátum: ${reservationDetails.date}\n⏰ Čas: ${reservationDetails.time}\n❌ Zrušenie: ${cancelLink}  `;
+    const smsMessage = `Vasa rezervacia bola uspesna. Datum: ${reservationDetails.date}, cas: ${reservationDetails.time}, Zrusenie: ${cancelLink}  `;
 
     try {
         await vonage.sms.send({ to, from, text: smsMessage });
@@ -98,11 +98,11 @@ const sendConfirmationSMS = async (phone, reservationDetails) => {
     }
 };
 const sendCancelSMS = async (phone, reservationDetails) => {
-    const from = "Vonage APIs";  // Sender name (can be a string or a phone number)
+    const from = "Dentalna Klinika Humenne";  // Sender name (can be a string or a phone number)
     const to = phone;  // Recipient phone number
-    const createLink = `https://red-dune-0ace81103.4.azurestaticapps.net/objednat-sa.html`;
+    const createLink = `https://red-dune-0ace81103.4.azurestaticapps.net/objednat-sa.html  `;
 
-    const smsMessage = `❌ Vaša rezervácia bola zrušená.\n📅 Dátum: ${reservationDetails.date}\n⏰ Čas: ${reservationDetails.time}\n🔄 Nová rezervácia: ${createLink}  `;
+    const smsMessage = `Vasa rezervacia bola zrusena. Nova rezervacia: ${createLink}  `;
 
     try {
         await vonage.sms.send({ to, from, text: smsMessage });
@@ -133,6 +133,8 @@ async function sendConfirmationEmail(toEmail, phone, reservationDetails) {
     const BASE_URL = process.env.BASE_URL || "https://red-dune-0ace81103.4.azurestaticapps.net";
     const cancelLink = `${BASE_URL}/zrusit.html?token=${reservationDetails.cancellation_token}`;
 
+    console.log("📩 Sending email with details:", reservationDetails); // Debugging log
+
     const mailOptions = {
         from: process.env.EMAIL_USER,
         to: toEmail,
@@ -141,8 +143,8 @@ async function sendConfirmationEmail(toEmail, phone, reservationDetails) {
 
 Vaša rezervácia na dentálnej klinike bola úspešne potvrdená.
 
-📅 Dátum: ${reservationDetails.date}
-⏰ Čas: ${reservationDetails.time}
+📅 Dátum: ${reservationDetails.date ? reservationDetails.date : "Neznámy dátum"}
+⏰ Čas: ${reservationDetails.time ? reservationDetails.time : "Neznámy čas"}
 📞 Telefón: ${phone}
 📧 Váš e-mail: ${toEmail}
 
@@ -157,45 +159,54 @@ Dentalná klinika`,
         await transporter.sendMail(mailOptions);
         console.log(`✅ Email sent to ${toEmail}`);
     } catch (error) {
-        logError(error);
         console.error("❌ Error sending email:", error);
     }
 }
 async function sendCancelEmail(toEmail, phone, reservationDetails) {
-    const createLink = `https://red-dune-0ace81103.4.azurestaticapps.net/objednat-sa.html`;
+    const createLink = "https://red-dune-0ace81103.4.azurestaticapps.net/objednat-sa.html";
+
+    console.log("📩 Sending cancellation email with details:", reservationDetails); // Debugging log
+
     const mailOptions = {
-      from: process.env.EMAIL_USER,
-      to: toEmail,
-      subject: "Zrušenie rezervácie - Dentalná klinika",
-      text: `Dobrý deň,
-  
-  Vaša rezervácia bola úspečne zrušená.
-  
-  📅 Dátum: ${reservationDetails.date}
-  ⏰ Čas: ${reservationDetails.time}
-  📞 Telefón: ${phone}
-  📧 Váš e-mail: ${toEmail}
-  
-  Ak si želáte vytvoriť novú rezerváciu môžete použit tento odkaz ${createLink}
-  
-  Dentalná klinika`,
+        from: process.env.EMAIL_USER,
+        to: toEmail,
+        subject: "Zrušenie rezervácie - Dentalná klinika",
+        text: `Dobrý deň,
+
+Vaša rezervácia bola úspešne zrušená.
+
+Ak si želáte vytvoriť novú rezerváciu, môžete použiť tento odkaz:
+🔄 Nová rezervácia: ${createLink}
+
+Dentalná klinika`,
     };
-  
+
     try {
-      await transporter.sendMail(mailOptions);
-      console.log(`✅ Email odoslaný na ${toEmail}`);
+        await transporter.sendMail(mailOptions);
+        console.log(`✅ Cancellation email sent to ${toEmail}`);
     } catch (error) {
-      console.error("❌ Chyba pri odosielaní emailu:", error);
+        console.error("❌ Error sending cancellation email:", error);
     }
-  }
+}
 
 
 
 // Format time
 function formatDateTime(dateString, timeString) {
+    // Vytvorenie objektu Date v UTC
     const date = new Date(dateString);
-    const formattedDate = `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}/${date.getFullYear()}`;
+
+    // Extrahovanie UTC dňa, mesiaca a roka (bez posunu časového pásma)
+    const den = String(date.getUTCDate()).padStart(2, '0');
+    const mesiac = String(date.getUTCMonth() + 1).padStart(2, '0'); // Mesiace sú indexované od 0
+    const rok = date.getUTCFullYear();
+
+    // Formátovanie dátumu na DD/MM/YYYY (v UTC)
+    const formattedDate = `${den}/${mesiac}/${rok}`;
+
+    // Extrahovanie len HH:MM z reťazca času (napr. "12:30:00" → "12:30")
     const formattedTime = timeString.slice(0, 5);
+
     return { formattedDate, formattedTime };
 }
 
@@ -268,11 +279,16 @@ app.post("/api/create_reservation", async (req, res) => {
         await client.query("UPDATE time_slots SET is_taken = true WHERE id = $1", [timeslot_id]);
         await client.query("COMMIT");
 
+        // 🔹 Použitie funkcie na správny formát dátumu a času
+        const { formattedDate, formattedTime } = formatDateTime(checkResult.rows[0].date, checkResult.rows[0].time);
+
         const reservationDetails = {
-            date: checkResult.rows[0].date,
-            time: checkResult.rows[0].time,
+            date: formattedDate,  // Už preformátovaný dátum
+            time: formattedTime,  // Už preformátovaný čas
             cancellation_token: cancellationToken
         };
+
+        console.log("📝 Odosielam rezerváciu s údajmi:", reservationDetails); // Debug log
 
         // ✅ Send confirmation email
         sendConfirmationEmail(email, phone, reservationDetails);
@@ -290,7 +306,6 @@ app.post("/api/create_reservation", async (req, res) => {
         client.release();
     }
 });
-
 
 
 
