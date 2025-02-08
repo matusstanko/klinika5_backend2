@@ -72,26 +72,33 @@ app.use(cors({
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public"))); // Serve static files
 
-// SMS - Twilio
-const twilio = require("twilio");
-const twilioClient = twilio(
-    process.env.TWILIO_ACCOUNT_SID,
-    process.env.TWILIO_AUTH_TOKEN
-);
+//SMS VONAGE
+const { Vonage } = require('@vonage/server-sdk')
 
-async function sendSMS(phone, message) {
+const vonage = new Vonage({
+  apiKey: process.env.VONAGE_API_KEY,  // Use the environment variables
+  apiSecret: process.env.VONAGE_API_SECRET
+});
+
+
+const sendSMS = async (phone, text) => {
+    const from = "Vonage APIs";  // Sender name (it can be a string or a valid phone number)
+    const to = phone;  // Recipient phone number
+    const messageText = text;  // Message body
+
     try {
-        const response = await twilioClient.messages.create({
-            body: message,
-            from: process.env.TWILIO_PHONE_NUMBER,
-            to: phone
-        });
-        console.log(`✅ SMS sent to ${phone}: ${response.sid}`);
-    } catch (error) {
-        logError(error);
-        console.error("❌ Error sending SMS:", error);
+        await vonage.sms.send({ to, from, text: messageText });
+        console.log('Message sent successfully');
+    } catch (err) {
+        console.log('There was an error sending the message.');
+        console.error(err);
     }
-}
+};
+
+
+
+
+
 
 // EMAIL - Nodemailer
 const nodemailer = require("nodemailer");
@@ -161,11 +168,21 @@ app.get("/api/get_all_timeslots", async (req, res) => {
 app.delete("/api/delete_timeslot/:id", async (req, res) => {
     const { id } = req.params;
     try {
-        const checkResult = await pool.query("SELECT is_taken FROM time_slots WHERE id = $1", [id]);
-        if (checkResult.rows.length === 0) return res.status(404).json({ error: "Termín neexistuje" });
-        if (checkResult.rows[0].is_taken) return res.status(400).json({ error: "Obsadený termín nemožno vymazať! Musíš najprv zrušiť rezerváciu" });
+        const checkResult = await pool.query("SELECT is_taken, phone FROM time_slots WHERE id = $1", [id]);
 
+        if (checkResult.rows.length === 0) return res.status(404).json({ error: "Termín neexistuje" });
+
+        if (checkResult.rows[0].is_taken) {
+            // If the timeslot is taken, send an error message
+            return res.status(400).json({ error: "Obsadený termín nemožno vymazať! Musíš najprv zrušiť rezerváciu" });
+        }
+
+        // Delete the time slot
         await pool.query("DELETE FROM time_slots WHERE id = $1", [id]);
+
+        // Send confirmation SMS
+        sendSMS(checkResult.rows[0].phone, `⛔ Termín s ID ${id} bol úspešne vymazaný.`);
+
         res.json({ message: "Termín úspešne vymazaný" });
 
     } catch (err) {
@@ -200,8 +217,9 @@ app.post("/api/create_reservation", async (req, res) => {
         await client.query("UPDATE time_slots SET is_taken = true WHERE id = $1", [timeslot_id]);
         await client.query("COMMIT");
 
+        // Send confirmation email and SMS
         sendConfirmationEmail(email, phone, { date: checkResult.rows[0].date, time: checkResult.rows[0].time, cancellation_token: cancellationToken });
-        sendSMS(phone, `✅ Vaša rezervácia bola úspešná.`);
+        sendSMS(phone, `✅ Vaša rezervácia bola úspešná. Termín: ${checkResult.rows[0].date} o ${checkResult.rows[0].time}.`);  // Send SMS here
 
         res.json({ message: "Rezervácia úspešná!" });
 
