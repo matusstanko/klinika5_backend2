@@ -9,11 +9,11 @@ const PORT = process.env.PORT || 3000; // Azure sets PORT automatically
 
 // PostgreSQL Connection (Azure)
 const pool = new Pool({
-    host: process.env.AZURE_POSTGRESQL_HOST,
-    user: process.env.AZURE_POSTGRESQL_USER,
-    password: process.env.AZURE_POSTGRESQL_PASSWORD,
-    database: process.env.AZURE_POSTGRESQL_DATABASE,
-    port: Number(process.env.AZURE_POSTGRESQL_PORT),
+    host: process.env.PGHOST,
+    user: process.env.PGUSER,
+    password: process.env.PGPASSWORD,
+    database: process.env.PGDATABASE,
+    port: Number(process.env.PGPORT),
     // Depending on your AZURE_POSTGRESQL_SSL value, you can conditionally set ssl options:
     ssl: process.env.AZURE_POSTGRESQL_SSL === 'true' 
            ? { rejectUnauthorized: false } 
@@ -216,3 +216,9 @@ app.post("/api/create_reservation", async (req, res) => {
 
 // Start server
 app.listen(PORT, () => console.log(`🟢 Server beží na port ${PORT}`));
+
+
+
+
+
+
