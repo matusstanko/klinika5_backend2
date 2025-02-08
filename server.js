@@ -111,7 +111,7 @@ const transporter = nodemailer.createTransport({
 });
 
 async function sendConfirmationEmail(toEmail, phone, reservationDetails) {
-    const BASE_URL = process.env.BASE_URL || "https://your-azure-webapp.azurewebsites.net";
+    const BASE_URL = process.env.BASE_URL || "https://red-dune-0ace81103.4.azurestaticapps.net";
     const cancelLink = `${BASE_URL}/zrusit.html?token=${reservationDetails.cancellation_token}`;
 
     const mailOptions = {
@@ -142,6 +142,35 @@ Dentalná klinika`,
         console.error("❌ Error sending email:", error);
     }
 }
+async function sendCancelEmail(toEmail, phone, reservationDetails) {
+    const createLink = `https://red-dune-0ace81103.4.azurestaticapps.net/objednat-sa.html`;
+    const mailOptions = {
+      from: process.env.EMAIL_USER,
+      to: toEmail,
+      subject: "Zrušenie rezervácie - Dentalná klinika",
+      text: `Dobrý deň,
+  
+  Vaša rezervácia bola úspečne zrušená.
+  
+  📅 Dátum: ${reservationDetails.date}
+  ⏰ Čas: ${reservationDetails.time}
+  📞 Telefón: ${phone}
+  📧 Váš e-mail: ${toEmail}
+  
+  Ak si želáte vytvoriť novú rezerváciu môžete použit tento odkaz ${createLink}
+  
+  Dentalná klinika`,
+    };
+  
+    try {
+      await transporter.sendMail(mailOptions);
+      console.log(`✅ Email odoslaný na ${toEmail}`);
+    } catch (error) {
+      console.error("❌ Chyba pri odosielaní emailu:", error);
+    }
+  }
+
+
 
 // Format time
 function formatDateTime(dateString, timeString) {
@@ -167,26 +196,29 @@ app.get("/api/get_all_timeslots", async (req, res) => {
 // DELETE: Delete time slot
 app.delete("/api/delete_timeslot/:id", async (req, res) => {
     const { id } = req.params;
+    console.log("ROUTE delete_timeslot/:id=",id)
     try {
-        const checkResult = await pool.query("SELECT is_taken, phone FROM time_slots WHERE id = $1", [id]);
+        // Skontrolujeme, či je termín obsadený
+        const checkResult = await pool.query("SELECT is_taken FROM time_slots WHERE id = $1", [id]);
 
-        if (checkResult.rows.length === 0) return res.status(404).json({ error: "Termín neexistuje" });
+        if (checkResult.rows.length === 0) {
+            console.log("Termin neexistuje");
+            return res.status(404).json({ error: "Termín neexistuje" });
+            
+        }
 
         if (checkResult.rows[0].is_taken) {
-            // If the timeslot is taken, send an error message
+            console.log("Nemozem vymazat obsadeny termin");
             return res.status(400).json({ error: "Obsadený termín nemožno vymazať! Musíš najprv zrušiť rezerváciu" });
         }
 
-        // Delete the time slot
+        // Ak termín nie je obsadený, môžeme ho vymazať
         await pool.query("DELETE FROM time_slots WHERE id = $1", [id]);
-
-        // Send confirmation SMS
-        sendSMS(checkResult.rows[0].phone, `⛔ Termín s ID ${id} bol úspešne vymazaný.`);
-
+        console.log("Uspesne vymazane")
         res.json({ message: "Termín úspešne vymazaný" });
 
     } catch (err) {
-        logError(err);
+        console.error(err);
         res.status(500).json({ error: "Chyba pri mazaní termínu" });
     }
 });
@@ -227,6 +259,83 @@ app.post("/api/create_reservation", async (req, res) => {
         await client.query("ROLLBACK");
         logError(err);
         res.status(500).json({ error: "Chyba pri rezervácii." });
+    } finally {
+        client.release();
+    }
+});
+
+
+
+
+
+
+// Vymazat
+app.post("/api/cancel_reservation", async (req, res) => {
+    const { cancellation_token } = req.body;
+
+    if (!cancellation_token) {
+        return res.status(400).json({ error: "Chýba storno token!" });
+    }
+
+    const client = await pool.connect();
+
+    try {
+        await client.query("BEGIN");
+
+        // 1️⃣ Find the reservation by `cancellation_token`
+        const reservationResult = await client.query(
+            "SELECT id, time_slot_id, email, phone FROM reservations WHERE cancellation_token = $1",
+            [cancellation_token]
+        );
+
+        if (reservationResult.rows.length === 0) {
+            await client.query("ROLLBACK");
+            return res.status(404).json({ error: "Rezervácia neexistuje alebo už bola zrušená." });
+        }
+
+        const { id, time_slot_id, email, phone } = reservationResult.rows[0];
+
+        // 2️⃣ Get reservation date and time
+        const timeSlotResult = await client.query(
+            "SELECT date, time FROM time_slots WHERE id = $1",
+            [time_slot_id]
+        );
+
+        if (timeSlotResult.rows.length === 0) {
+            await client.query("ROLLBACK");
+            return res.status(500).json({ error: "Chyba pri získavaní informácií o termíne." });
+        }
+
+        // ✅ Fix: Ensure correct handling of date and time
+        const rawDate = new Date(timeSlotResult.rows[0].date); // Ensure it's a Date object
+        const rawTime = String(timeSlotResult.rows[0].time); // Ensure it's a string
+
+        const { formattedDate, formattedTime } = formatDateTime(rawDate, rawTime);
+
+        // 3️⃣ Delete the reservation
+        await client.query("DELETE FROM reservations WHERE id = $1", [id]);
+
+        // 4️⃣ Free up the time slot (`is_taken = false`)
+        await client.query("UPDATE time_slots SET is_taken = false WHERE id = $1", [time_slot_id]);
+
+        await client.query("COMMIT");
+
+        console.log(`✅ Rezervácia ID ${id} bola úspešne zrušená.`);
+
+        // 5️⃣ Send cancellation email
+        sendCancelEmail(email, phone, { formattedDate, formattedTime });
+
+        // 6️⃣ Send cancellation SMS
+        const newBookingLink = `https://red-dune-0ace81103.4.azurestaticapps.net/objednat-sa.html`;
+        const cancellationMessage = `❌ Vasa rezervacia bola zrusená.\n📅 Datum: ${formattedDate}\n⏰ cas: ${formattedTime}\n🔄 Nova rezervacia: ${newBookingLink}`;
+        sendSMS(phone, cancellationMessage);
+
+        res.json({ message: "Rezervácia bola úspešne zrušená a termín je opäť dostupný." });
+
+    } catch (err) {
+        await client.query("ROLLBACK");
+        console.error("❌ Chyba pri rušení rezervácie:", err);
+        res.status(500).json({ error: "Chyba pri rušení rezervácie." });
     } finally {
         client.release();
     }
