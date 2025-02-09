@@ -95,46 +95,56 @@ app.use(cors({
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public"))); // Serve static files
 
-//SMS VONAGE
-const { Vonage } = require('@vonage/server-sdk')
+//SMS TWILIO
 
-const vonage = new Vonage({
-  apiKey: process.env.VONAGE_API_KEY,  // Use the environment variables
-  apiSecret: process.env.VONAGE_API_SECRET
-});
+const twilio = require('twilio');
 
+// Initialize Twilio with credentials from .env
+const twilioClient = twilio(
+    process.env.TWILIO_ACCOUNT_SID,
+    process.env.TWILIO_AUTH_TOKEN
+);
 
+// Send Confirmation SMS
 const sendConfirmationSMS = async (phone, reservationDetails) => {
-    const from = "Dentalna Klinika Humenne";  // Sender name (can be a string or a phone number)
-    const to = phone;  // Recipient phone number
-    const BASE_URL = process.env.BASE_URL || "https://red-dune-0ace81103.4.azurestaticapps.net";
+    const BASE_URL = process.env.BASE_URL || "https://matustest.eu";
     const cancelLink = `${BASE_URL}/zrusit.html?token=${reservationDetails.cancellation_token}`;
 
-    const smsMessage = `Vasa rezervacia bola uspesna. Datum: ${reservationDetails.date}, cas: ${reservationDetails.time}, Zrusenie: ${cancelLink}  `;
+    const smsMessage = `Vaša rezervácia bola úspešná! 📅 Dátum: ${reservationDetails.date}, ⏰ Čas: ${reservationDetails.time}. Zrušenie: ${cancelLink}`;
 
     try {
-        await vonage.sms.send({ to, from, text: smsMessage });
+        await twilioClient.messages.create({
+            body: smsMessage,
+            from: process.env.TWILIO_PHONE_NUMBER,  // Twilio phone number
+            to: phone
+        });
         console.log(`✅ Confirmation SMS sent to ${phone}`);
     } catch (err) {
-        console.log('❌ Error sending confirmation SMS.');
-        console.error(err);
+        console.error("❌ Error sending confirmation SMS:", err);
     }
 };
-const sendCancelSMS = async (phone, reservationDetails) => {
-    const from = "Dentalna Klinika Humenne";  // Sender name (can be a string or a phone number)
-    const to = phone;  // Recipient phone number
-    const createLink = `https://red-dune-0ace81103.4.azurestaticapps.net/objednat-sa.html  `;
 
-    const smsMessage = `Vasa rezervacia bola zrusena. Nova rezervacia: ${createLink}  `;
+// Send Cancellation SMS
+const sendCancelSMS = async (phone) => {
+    const createLink = "https://matustest.eu/objednat-sa.html";
+
+    const smsMessage = `Vaša rezervácia bola zrušená. 🔄 Nová rezervácia: ${createLink}`;
 
     try {
-        await vonage.sms.send({ to, from, text: smsMessage });
+        await twilioClient.messages.create({
+            body: smsMessage,
+            from: process.env.TWILIO_PHONE_NUMBER,
+            to: phone
+        });
         console.log(`✅ Cancellation SMS sent to ${phone}`);
     } catch (err) {
-        console.log('❌ Error sending cancellation SMS.');
-        console.error(err);
+        console.error("❌ Error sending cancellation SMS:", err);
     }
 };
+
+
+
+
 
 
 
